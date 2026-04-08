@@ -1,0 +1,66 @@
+%YAML:1.0
+---
+
+# 0 for showing algorithm running error; 1 for showing algorithm running results; 2 for showing algorithm result image in local machine
+debug_show: 0
+
+#     RKNN_NPU_CORE_AUTO = 0
+#     RKNN_NPU_CORE_0 = 1
+#     RKNN_NPU_CORE_1 = 2
+#     RKNN_NPU_CORE_2 = 4
+#     RKNN_NPU_CORE_0_1 = RKNN_NPU_CORE_0 | RKNN_NPU_CORE_1
+#     RKNN_NPU_CORE_0_1_2 = RKNN_NPU_CORE_0_1 | RKNN_NPU_CORE_2
+#     RKNN_NPU_CORE_ALL = 0xffff
+rknn_model_inference: 2
+
+# Detection
+detect_rknn_model: "models/rknn/int8_pd_yolov26n_mmse_channel.rknn"
+detect_class_num: 1
+detect_image_width: 416
+detect_image_height: 416
+detect_score_threshold: 0.25
+nms_iou_threshold: 0.45
+
+# Tracking: ByteTrack
+bytetrack_track_buffer: 30
+bytetrack_track_thresh: 0.1
+bytetrack_high_thresh: 0.3
+bytetrack_new_track_thresh: 0.5
+bytetrack_match_thresh: 0.8
+
+# Tracking: BoTSORT√
+botsort_track_buffer: 30
+botsort_track_thresh: 0.1
+botsort_high_thresh: 0.3
+botsort_new_track_thresh: 0.5
+botsort_match_thresh: 0.8
+botsort_gmc_method: 0   # 0=ORB, 1=SparseOptFlow, 2=None
+
+# Tracking: OA-ByteTrack
+oabytetrack_track_buffer: 30
+oabytetrack_track_thresh: 0.1
+oabytetrack_high_thresh: 0.3
+oabytetrack_new_track_thresh: 0.5
+oabytetrack_match_thresh: 0.8
+oabytetrack_use_oao: 1
+oabytetrack_use_bam: 1
+
+# Tracking: OA-BoTSORT√
+oabotsort_track_buffer: 30
+oabotsort_track_thresh: 0.1
+oabotsort_high_thresh: 0.3
+oabotsort_new_track_thresh: 0.5
+oabotsort_match_thresh: 0.8
+oabotsort_gmc_method: 0 # 0=ORB, 1=SparseOptFlow, 2=None
+oabotsort_use_oao: 1
+oabotsort_use_bam: 1
+
+# Person ReID
+person_reid_rknn_model: "models/rknn/osnet_x0_25_0320_aug_reid.rknn"
+person_similarity_threshold: 0.80
+
+# Gallery
+gallery_max_size: 30
+gallery_feature_length: 512
+gallerry_database_dir: "./output/gallery_database"
+gallery_similarity_save_threshold: 0.82

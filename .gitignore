@@ -1,0 +1,6 @@
+build/
+.omx/
+.codex
+detector_test
+__pycache__/
+*.pyc
