@@ -4,3 +4,7 @@ build/
 detector_test
 __pycache__/
 *.pyc
+test/*.jpg
+test/*.jpeg
+test/*.png
+test/*.mp4

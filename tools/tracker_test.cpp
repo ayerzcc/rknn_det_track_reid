@@ -25,6 +25,7 @@
 #include "tracker/OAByteTracker.h"
 #include "tracker/BoTSORT.h"
 #include "tracker/Object.h"
+#include "tracker/ReIDRecovery.h"
 
 namespace
 {
@@ -792,7 +793,7 @@ int run_botsort_video(TrackerT& tracker,
     const size_t visual_lost_window = 3;
     const size_t recovery_window = std::min<size_t>(tracker.getMaxTimeLost(), 10);
 
-    std::unordered_map<size_t, std::deque<std::vector<float>>> gallery;
+    byte_track::ReIDRecovery reid_recovery;
 
     cv::VideoCapture cap(options.input_path);
     if (!cap.isOpened()) {
@@ -845,7 +846,7 @@ int run_botsort_video(TrackerT& tracker,
             const auto track_features = extractor.extract(frame, track_boxes);
             for (size_t i = 0; i < active_tracks.size() && i < track_features.size(); ++i) {
                 if (!track_features[i].empty()) {
-                    update_gallery(gallery, active_tracks[i]->getTrackId(), track_features[i], gallery_history);
+                    reid_recovery.updateGallery(active_tracks[i]->getTrackId(), track_features[i], gallery_history);
                 }
             }
         }
@@ -859,13 +860,30 @@ int run_botsort_video(TrackerT& tracker,
             }
             const auto det_features = extractor.extract(frame, det_boxes);
             attach_features_to_detections(detections, det_features);
-            recovered_count = recover_lost_tracks(tracker,
-                                                  detections,
-                                                  active_matches,
-                                                  gallery,
-                                                  reid_match_threshold,
-                                                  recovery_window,
-                                                  gallery_history);
+            std::vector<byte_track::Object> det_objects;
+            std::vector<std::array<float, 4>> det_boxes_with_features;
+            std::vector<std::vector<float>> det_feature_vectors;
+            det_objects.reserve(detections.size());
+            det_boxes_with_features.reserve(detections.size());
+            det_feature_vectors.reserve(detections.size());
+            for (const auto& detection : detections) {
+                det_objects.push_back(detection.object);
+                det_boxes_with_features.push_back(detection.box);
+                det_feature_vectors.push_back(detection.feature);
+            }
+            recovered_count = reid_recovery.recoverLostTracks(
+                tracker.getLostStracks(),
+                det_objects,
+                det_boxes_with_features,
+                det_feature_vectors,
+                active_matches,
+                tracker.getFrameId(),
+                recovery_window,
+                reid_match_threshold,
+                gallery_history,
+                [&](const STrackPtr& track, const byte_track::Object& object) {
+                    return tracker.recoverTrack(track, object);
+                });
         }
         active_tracks = collect_active_tracks(tracker.getTrackedStracks());
         std::vector<STrackPtr> recent_lost;

@@ -101,9 +101,9 @@ std::vector<byte_track::OAByteTracker::STrackPtr> byte_track::OAByteTracker::upd
     for (const auto& object : objects)
     {
         auto strack = std::make_shared<STrack>(object.rect, object.prob, object.feature);
-        if (object.prob >= track_thresh_)
+        if (object.prob >= high_thresh_)
             det_stracks.push_back(strack);
-        else
+        else if (object.prob >= track_thresh_)
             det_low_stracks.push_back(strack);
     }
 
@@ -297,7 +297,12 @@ std::vector<byte_track::OAByteTracker::STrackPtr> byte_track::OAByteTracker::upd
         if (track->isActivated())
             output_stracks.push_back(track);
 
-    removed_stracks_.clear();
+    constexpr size_t kMaxRemovedTracks = 1000;
+    if (removed_stracks_.size() > kMaxRemovedTracks)
+    {
+        removed_stracks_.erase(removed_stracks_.begin(),
+                               removed_stracks_.end() - static_cast<std::ptrdiff_t>(kMaxRemovedTracks));
+    }
     return output_stracks;
 }
 

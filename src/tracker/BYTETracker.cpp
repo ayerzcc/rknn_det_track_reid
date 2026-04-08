@@ -325,12 +325,12 @@ std::vector<byte_track::BYTETracker::STrackPtr> byte_track::BYTETracker::update(
         }
     }
 
-    // if (removed_stracks_.size() > max_removed_count_) 
-    // {
-    //     removed_stracks_.erase(removed_stracks_.begin(),removed_stracks_.end() - max_removed_count_);
-    // }
-
-    removed_stracks_.erase(removed_stracks_.begin(), removed_stracks_.end());
+    constexpr size_t kMaxRemovedTracks = 1000;
+    if (removed_stracks_.size() > kMaxRemovedTracks)
+    {
+        removed_stracks_.erase(removed_stracks_.begin(),
+                               removed_stracks_.end() - static_cast<std::ptrdiff_t>(kMaxRemovedTracks));
+    }
 
     return output_stracks;
 }

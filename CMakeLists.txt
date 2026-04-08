@@ -32,6 +32,7 @@ set(TRACKER_SRCS
     src/tracker/OcclusionAware.cpp
     src/tracker/OAByteTracker.cpp
     src/tracker/BoTSORT.cpp
+    src/tracker/ReIDRecovery.cpp
 )
 
 set(CORE_SRCS

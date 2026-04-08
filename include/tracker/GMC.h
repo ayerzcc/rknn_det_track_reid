@@ -1,6 +1,8 @@
 #pragma once
 
 #include <opencv2/opencv.hpp>
+#include <cstddef>
+#include <string>
 #include <vector>
 
 namespace bot_sort
@@ -26,6 +28,7 @@ public:
      */
     cv::Matx23f apply(const cv::Mat& frame,
                       const std::vector<cv::Rect2f>& detections = {});
+    const std::string& getLastDebugJson() const { return last_debug_json_; }
 
 private:
     GMCMethod method_;
@@ -44,6 +47,8 @@ private:
     std::vector<cv::KeyPoint> prev_kpts_;
     cv::Mat prev_desc_;
     bool initialized_;
+    std::string last_debug_json_;
+    size_t apply_count_ = 0;
 
     cv::Matx23f applyORB(const cv::Mat& gray, int w, int h,
                          const std::vector<cv::Rect2f>& dets);

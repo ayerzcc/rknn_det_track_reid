@@ -483,6 +483,7 @@ std::vector<BoTSORT::STrackPtr> BoTSORT::update(
     std::ostringstream dbg;
     dbg << "{\"frame\":" << frame_id_
         << ",\"gmc\":[" << H(0,0) << "," << H(0,1) << "," << H(0,2) << "," << H(1,0) << "," << H(1,1) << "," << H(1,2) << "]"
+        << ",\"gmc_debug\":" << gmc_->getLastDebugJson()
         << ",\"pool_ids\":[";
     for (size_t i = 0; i < pool.size(); ++i) {
         dbg << pool[i]->getTrackId();
@@ -832,6 +833,7 @@ std::vector<OABoTSORT::STrackPtr> OABoTSORT::update(
     std::ostringstream dbg;
     dbg << "{\"frame\":" << frame_id_
         << ",\"gmc\":[" << H(0,0) << "," << H(0,1) << "," << H(0,2) << "," << H(1,0) << "," << H(1,1) << "," << H(1,2) << "]"
+        << ",\"gmc_debug\":" << gmc_->getLastDebugJson()
         << ",\"pool_ids\":[";
     for (size_t i = 0; i < pool.size(); ++i) {
         dbg << pool[i]->getTrackId();
