@@ -59,9 +59,6 @@ target_link_libraries(tracker_test vision_module_core)
 add_executable(reid_test tools/reid_test.cpp)
 target_link_libraries(reid_test vision_module_core)
 
-add_executable(pipeline_test tools/pipeline_test.cpp)
-target_link_libraries(pipeline_test vision_module_core)
-
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -mcpu=cortex-a76 -mtune=cortex-a76")
 endif()

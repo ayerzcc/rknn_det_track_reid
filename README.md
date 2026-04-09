@@ -65,7 +65,6 @@ rover_vision_module_lab/
 ├── test/
 ├── tools/
 │   ├── detector_test.cpp
-│   ├── pipeline_test.cpp
 │   ├── reid_test.cpp
 │   └── tracker_test.cpp
 └── tracker/
@@ -496,10 +495,6 @@ ReID 在 BoTSORT 中现在主要用于：
 - 轨迹 CSV 导出
 
 如果要验证端侧实际效果，优先跑它。
-
-### 8.4 `pipeline_test`
-
-它更偏“指定目标 / gallery / ReID 检索”的实验入口，不是当前三种 tracker 横向对比的主入口。
 
 ## 9. 常用命令
 
