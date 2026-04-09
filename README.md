@@ -1,4 +1,4 @@
-# Rover Vision Module Lab
+# rknn_det_track_reid
 
 面向端侧的视频检测、跟踪、ReID 联调工程。
 
