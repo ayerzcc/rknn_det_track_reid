@@ -51,6 +51,7 @@ struct Options
     int frame_rate = 30;
     int max_frames = -1;
     int track_buffer = 30;
+    int recovery_window = -1;
     float track_thresh = 0.0f;  // loaded from config
     float high_thresh = 0.0f;   // loaded from config
     float match_thresh = 0.0f;  // loaded from config
@@ -106,6 +107,7 @@ void print_usage()
         << "  --track-thresh <f>     Track confidence threshold (default: 0.5)\n"
         << "  --high-thresh <f>      High confidence threshold (default: 0.6)\n"
         << "  --match-thresh <f>     Match threshold (default: 0.8)\n"
+        << "  --recovery-window <n>  ReID recovery window in frames (default: min(max_lost, 10))\n"
         << "  --gmc-method <type>    GMC method for BoTSORT: orb (default), sparse, none\n"
         << "  --no-oao               Disable OAO for OABoTSORT\n"
         << "  --no-bam               Disable BAM for OABoTSORT\n"
@@ -163,6 +165,8 @@ bool parse_args(int argc, char** argv, Options& options)
             options.high_thresh = std::stof(argv[++i]);
         } else if (arg == "--match-thresh" && i + 1 < argc) {
             options.match_thresh = std::stof(argv[++i]);
+        } else if (arg == "--recovery-window" && i + 1 < argc) {
+            options.recovery_window = std::stoi(argv[++i]);
         } else if (arg == "--gmc-method" && i + 1 < argc) {
             const std::string v = argv[++i];
             if (v == "sparse") options.gmc_method = bot_sort::GMCMethod::SparseOptFlow;
@@ -368,9 +372,9 @@ void attach_features_to_detections(std::vector<DetectionInfo>& detections,
     }
 }
 
-std::unordered_map<size_t, size_t> associate_tracks_to_detections(const std::vector<STrackPtr>& tracks,
-                                                                  const std::vector<DetectionInfo>& detections,
-                                                                  float min_iou)
+std::vector<byte_track::ReIDRecovery::ActiveMatch> associate_tracks_to_detections(const std::vector<STrackPtr>& tracks,
+                                                                                  const std::vector<DetectionInfo>& detections,
+                                                                                  float min_iou)
 {
     struct MatchItem {
         size_t track_id;
@@ -393,7 +397,7 @@ std::unordered_map<size_t, size_t> associate_tracks_to_detections(const std::vec
         return lhs.iou > rhs.iou;
     });
 
-    std::unordered_map<size_t, size_t> matches;
+    std::vector<byte_track::ReIDRecovery::ActiveMatch> matches;
     std::set<size_t> used_tracks;
     std::set<size_t> used_dets;
     for (const auto& candidate : candidates) {
@@ -402,7 +406,7 @@ std::unordered_map<size_t, size_t> associate_tracks_to_detections(const std::vec
         }
         used_tracks.insert(candidate.track_id);
         used_dets.insert(candidate.det_index);
-        matches[candidate.track_id] = candidate.det_index;
+        matches.push_back({candidate.track_id, candidate.det_index, candidate.iou});
     }
     return matches;
 }
@@ -791,9 +795,12 @@ int run_botsort_video(TrackerT& tracker,
     const float reid_match_threshold = std::min(params_config->getKeyValue<float>("person_similarity_threshold"), 0.80f);
     const size_t gallery_history = 10;
     const size_t visual_lost_window = 3;
-    const size_t recovery_window = std::min<size_t>(tracker.getMaxTimeLost(), 10);
+    const size_t recovery_window = (options.recovery_window > 0)
+        ? static_cast<size_t>(options.recovery_window)
+        : std::min<size_t>(tracker.getMaxTimeLost(), 10);
 
     byte_track::ReIDRecovery reid_recovery;
+    reid_recovery.resetStats();
 
     cv::VideoCapture cap(options.input_path);
     if (!cap.isOpened()) {
@@ -835,7 +842,7 @@ int run_botsort_video(TrackerT& tracker,
 
         run_tracker_update(tracker, tracker_objects, frame);
         auto active_tracks = collect_active_tracks(tracker.getTrackedStracks());
-        const auto active_matches = associate_tracks_to_detections(active_tracks, detections, 0.1f);
+        const auto active_match_infos = associate_tracks_to_detections(active_tracks, detections, 0.1f);
 
         if (options.enable_reid_recovery && !active_tracks.empty()) {
             std::vector<std::array<float, 4>> track_boxes;
@@ -852,13 +859,38 @@ int run_botsort_video(TrackerT& tracker,
         }
 
         size_t recovered_count = 0;
+        std::set<size_t> suppressed_active_ids;
         if (options.enable_reid_recovery && !tracker.getLostStracks().empty() && !detections.empty()) {
             std::vector<std::array<float, 4>> det_boxes;
             det_boxes.reserve(detections.size());
             for (const auto& detection : detections) {
                 det_boxes.push_back(detection.box);
             }
+
+            size_t crop_invalid = 0;
+            for (const auto& box : det_boxes) {
+                const int x1 = std::max(0, std::min(frame.cols - 1, static_cast<int>(std::round(box[0]))));
+                const int y1 = std::max(0, std::min(frame.rows - 1, static_cast<int>(std::round(box[1]))));
+                const int x2 = std::max(0, std::min(frame.cols, static_cast<int>(std::round(box[2]))));
+                const int y2 = std::max(0, std::min(frame.rows, static_cast<int>(std::round(box[3]))));
+                if (x2 <= x1 || y2 <= y1) {
+                    ++crop_invalid;
+                }
+            }
             const auto det_features = extractor.extract(frame, det_boxes);
+            size_t feature_count_mismatch = 0;
+            if (det_features.size() != det_boxes.size()) {
+                feature_count_mismatch = det_boxes.size() > det_features.size()
+                    ? det_boxes.size() - det_features.size()
+                    : det_features.size() - det_boxes.size();
+            }
+            size_t extract_empty = 0;
+            for (const auto& feature : det_features) {
+                if (feature.empty()) {
+                    ++extract_empty;
+                }
+            }
+            reid_recovery.recordDetectionFeatureStats(crop_invalid, extract_empty, feature_count_mismatch);
             attach_features_to_detections(detections, det_features);
             std::vector<byte_track::Object> det_objects;
             std::vector<std::array<float, 4>> det_boxes_with_features;
@@ -870,6 +902,28 @@ int run_botsort_video(TrackerT& tracker,
                 det_objects.push_back(detection.object);
                 det_boxes_with_features.push_back(detection.box);
                 det_feature_vectors.push_back(detection.feature);
+            }
+            const auto override_decisions = reid_recovery.recoverFromLowQualityActiveMatches(
+                tracker.getLostStracks(),
+                det_objects,
+                det_boxes_with_features,
+                det_feature_vectors,
+                active_match_infos,
+                tracker.getFrameId(),
+                recovery_window,
+                std::min(reid_match_threshold, 0.7f),
+                0.5f,
+                [&](const STrackPtr& track, const byte_track::Object& object) {
+                    return tracker.recoverTrack(track, object);
+                });
+            for (const auto& decision : override_decisions) {
+                suppressed_active_ids.insert(decision.active_track_id);
+            }
+            std::vector<byte_track::ReIDRecovery::ActiveMatch> active_matches;
+            for (const auto& match : active_match_infos) {
+                if (suppressed_active_ids.count(match.track_id) == 0) {
+                    active_matches.push_back(match);
+                }
             }
             recovered_count = reid_recovery.recoverLostTracks(
                 tracker.getLostStracks(),
@@ -886,6 +940,13 @@ int run_botsort_video(TrackerT& tracker,
                 });
         }
         active_tracks = collect_active_tracks(tracker.getTrackedStracks());
+        if (!suppressed_active_ids.empty()) {
+            active_tracks.erase(
+                std::remove_if(active_tracks.begin(), active_tracks.end(), [&](const STrackPtr& track) {
+                    return suppressed_active_ids.count(track->getTrackId()) > 0;
+                }),
+                active_tracks.end());
+        }
         std::vector<STrackPtr> recent_lost;
         if (options.show_lost_tracks) {
             recent_lost = collect_recent_lost_tracks(tracker.getLostStracks(),
@@ -945,6 +1006,76 @@ int run_botsort_video(TrackerT& tracker,
         if (options.max_frames > 0 && frame_index >= options.max_frames) {
             break;
         }
+    }
+
+    const auto& reid_stats = reid_recovery.getStats();
+    std::cout << "reid_stats"
+              << " recovered_success=" << reid_stats.recovered_success
+              << " over_window=" << reid_stats.over_window
+              << " track_feature_empty=" << reid_stats.track_feature_empty
+              << " det_feature_empty=" << reid_stats.det_feature_empty
+              << " det_crop_invalid=" << reid_stats.det_crop_invalid
+              << " det_extract_empty=" << reid_stats.det_extract_empty
+              << " det_feature_count_mismatch=" << reid_stats.det_feature_count_mismatch
+              << " det_used_by_active=" << reid_stats.det_used_by_active
+              << " det_feature_missing=" << reid_stats.det_feature_missing
+              << " similarity_fail=" << reid_stats.similarity_fail
+              << " geometry_fail=" << reid_stats.geometry_fail
+              << " conflict_fail=" << reid_stats.conflict_fail
+              << std::endl;
+
+    std::vector<std::pair<size_t, byte_track::ReIDRecovery::FrameStats>> frame_stats(
+        reid_recovery.getFrameStats().begin(), reid_recovery.getFrameStats().end());
+    std::sort(frame_stats.begin(), frame_stats.end(), [](const auto& lhs, const auto& rhs) {
+        return lhs.second.det_used_by_active > rhs.second.det_used_by_active;
+    });
+    const size_t top_n = std::min<size_t>(10, frame_stats.size());
+    for (size_t i = 0; i < top_n; ++i) {
+        const auto& item = frame_stats[i];
+        std::cout << "reid_frame"
+                  << " frame=" << item.first
+                  << " det_used_by_active=" << item.second.det_used_by_active
+                  << " similarity_fail=" << item.second.similarity_fail
+                  << " over_window=" << item.second.over_window
+                  << " active_track_ids=";
+        bool first_active = true;
+        for (size_t track_id : item.second.active_track_ids) {
+            if (!first_active) std::cout << ",";
+            std::cout << track_id;
+            first_active = false;
+        }
+        std::cout << " used_det_indices=";
+        bool first_det = true;
+        for (size_t det_index : item.second.used_det_indices) {
+            if (!first_det) std::cout << ",";
+            std::cout << det_index;
+            first_det = false;
+        }
+        std::cout << " active_det_ious=";
+        bool first_iou = true;
+        for (const auto& [det_index, iou] : item.second.active_det_ious) {
+            if (!first_iou) std::cout << ",";
+            std::cout << det_index << ":" << iou;
+            first_iou = false;
+        }
+        std::cout << " impacted_tracks=";
+        bool first = true;
+        for (size_t track_id : item.second.impacted_tracks) {
+            if (!first) std::cout << ",";
+            std::cout << track_id;
+            first = false;
+        }
+        std::cout << " blocked_candidates=";
+        bool first_blocked = true;
+        for (const auto& blocked : item.second.blocked_candidates) {
+            if (!first_blocked) std::cout << ";";
+            std::cout << blocked.track_id << "->det" << blocked.det_index
+                      << "@sim=" << blocked.similarity
+                      << ",iou=" << blocked.iou
+                      << ",cr=" << blocked.center_ratio;
+            first_blocked = false;
+        }
+        std::cout << std::endl;
     }
 
     return EXIT_SUCCESS;

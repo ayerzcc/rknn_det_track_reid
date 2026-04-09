@@ -28,7 +28,7 @@ bytetrack_high_thresh: 0.3
 bytetrack_new_track_thresh: 0.5
 bytetrack_match_thresh: 0.8
 
-# Tracking: BoTSORT√
+# Tracking: BoTSORT
 botsort_track_buffer: 30
 botsort_track_thresh: 0.1
 botsort_high_thresh: 0.3
@@ -45,7 +45,7 @@ oabytetrack_match_thresh: 0.8
 oabytetrack_use_oao: 1
 oabytetrack_use_bam: 1
 
-# Tracking: OA-BoTSORT√
+# Tracking: OA-BoTSORT
 oabotsort_track_buffer: 30
 oabotsort_track_thresh: 0.1
 oabotsort_high_thresh: 0.3
