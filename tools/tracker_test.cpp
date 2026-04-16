@@ -89,6 +89,25 @@ struct RecoveryCandidate
     float center_ratio = 0.0f;
 };
 
+cv::Scalar color_for_track_id(size_t track_id)
+{
+    static const std::array<cv::Scalar, 12> palette = {
+        cv::Scalar(0, 200, 255),
+        cv::Scalar(0, 180, 120),
+        cv::Scalar(255, 128, 0),
+        cv::Scalar(0, 128, 255),
+        cv::Scalar(180, 80, 255),
+        cv::Scalar(255, 80, 160),
+        cv::Scalar(80, 220, 80),
+        cv::Scalar(255, 180, 60),
+        cv::Scalar(80, 160, 255),
+        cv::Scalar(200, 120, 0),
+        cv::Scalar(120, 220, 220),
+        cv::Scalar(160, 160, 255),
+    };
+    return palette[track_id % palette.size()];
+}
+
 void print_usage()
 {
     std::cout
@@ -612,6 +631,19 @@ void draw_tracks(cv::Mat& frame,
     }
 }
 
+void draw_track(cv::Mat& frame,
+                const STrackPtr& track,
+                const cv::Scalar& color,
+                const std::string& prefix = "")
+{
+    if (!track) {
+        return;
+    }
+
+    const std::vector<STrackPtr> single_track{track};
+    draw_tracks(frame, single_track, color, prefix);
+}
+
 bool write_or_open_video(cv::VideoWriter& writer,
                          const Options& options,
                          const cv::VideoCapture& cap,
@@ -773,7 +805,9 @@ int run_botsort_image(TrackerT& tracker,
 
         run_tracker_update(tracker, tracker_objects, image);
         const auto active_tracks = collect_active_tracks(tracker.getTrackedStracks());
-        draw_tracks(image, active_tracks, cv::Scalar(0, 200, 255));
+        for (const auto& track : active_tracks) {
+            draw_track(image, track, color_for_track_id(track->getTrackId()));
+        }
 
     if (!options.output_path.empty() && !cv::imwrite(options.output_path, image)) {
         std::cerr << "Failed to write output image: " << options.output_path << std::endl;
@@ -792,12 +826,18 @@ int run_botsort_video(TrackerT& tracker,
                       PersonFeatureExtractor& extractor)
 {
     std::shared_ptr<Config> params_config = Config::getDefaultInstance();
-    const float reid_match_threshold = std::min(params_config->getKeyValue<float>("person_similarity_threshold"), 0.80f);
+    const float reid_match_threshold = std::min(params_config->getKeyValue<float>("person_similarity_threshold"), 0.30f);
     const size_t gallery_history = 10;
     const size_t visual_lost_window = 3;
     const size_t recovery_window = (options.recovery_window > 0)
         ? static_cast<size_t>(options.recovery_window)
-        : std::min<size_t>(tracker.getMaxTimeLost(), 10);
+        : static_cast<size_t>(params_config->getKeyValue<int>("botsort_recovery_window"));
+    const size_t recovery_persist_frames = std::max<size_t>(
+        1,
+        static_cast<size_t>(params_config->getKeyValue<int>("reid_recovery_persist_frames")));
+    const size_t max_active_age_frames = std::max<size_t>(
+        1,
+        static_cast<size_t>(params_config->getKeyValue<int>("reid_recovery_max_active_age_frames")));
 
     byte_track::ReIDRecovery reid_recovery;
     reid_recovery.resetStats();
@@ -843,6 +883,14 @@ int run_botsort_video(TrackerT& tracker,
         run_tracker_update(tracker, tracker_objects, frame);
         auto active_tracks = collect_active_tracks(tracker.getTrackedStracks());
         const auto active_match_infos = associate_tracks_to_detections(active_tracks, detections, 0.1f);
+        std::unordered_map<size_t, size_t> active_track_ages;
+        active_track_ages.reserve(active_tracks.size());
+        for (const auto& track : active_tracks) {
+            const size_t age = (track->getFrameId() >= track->getStartFrameId())
+                ? track->getFrameId() - track->getStartFrameId()
+                : 0;
+            active_track_ages[track->getTrackId()] = age;
+        }
 
         if (options.enable_reid_recovery && !active_tracks.empty()) {
             std::vector<std::array<float, 4>> track_boxes;
@@ -909,9 +957,12 @@ int run_botsort_video(TrackerT& tracker,
                 det_boxes_with_features,
                 det_feature_vectors,
                 active_match_infos,
+                active_track_ages,
                 tracker.getFrameId(),
                 recovery_window,
                 std::min(reid_match_threshold, 0.7f),
+                recovery_persist_frames,
+                max_active_age_frames,
                 0.5f,
                 [&](const STrackPtr& track, const byte_track::Object& object) {
                     return tracker.recoverTrack(track, object);
@@ -955,7 +1006,9 @@ int run_botsort_video(TrackerT& tracker,
         }
 
         cv::Mat vis_frame = frame.clone();
-        draw_tracks(vis_frame, active_tracks, cv::Scalar(0, 200, 255));
+        for (const auto& track : active_tracks) {
+            draw_track(vis_frame, track, color_for_track_id(track->getTrackId()));
+        }
         if (options.show_lost_tracks) {
             draw_tracks(vis_frame, recent_lost, cv::Scalar(180, 180, 180), "L");
         }

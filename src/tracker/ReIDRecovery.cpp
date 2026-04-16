@@ -17,6 +17,11 @@ void ReIDRecovery::recordDetectionFeatureStats(size_t crop_invalid,
     stats_.det_feature_count_mismatch += feature_count_mismatch;
 }
 
+std::string ReIDRecovery::makePendingKey(size_t active_track_id, size_t lost_track_id)
+{
+    return std::to_string(active_track_id) + ":" + std::to_string(lost_track_id);
+}
+
 void ReIDRecovery::updateGallery(size_t track_id,
                                  const std::vector<float>& feature,
                                  size_t max_history)
@@ -216,9 +221,12 @@ std::vector<ReIDRecovery::OverrideDecision> ReIDRecovery::recoverFromLowQualityA
     const std::vector<std::array<float, 4>>& det_boxes,
     const std::vector<std::vector<float>>& det_features,
     const std::vector<ActiveMatch>& active_matches,
+    const std::unordered_map<size_t, size_t>& active_track_ages,
     size_t frame_id,
     size_t recovery_window,
     float similarity_threshold,
+    size_t persist_frames,
+    size_t max_active_age_frames,
     float active_iou_threshold,
     const RecoverFn& recover_fn) const
 {
@@ -233,6 +241,8 @@ std::vector<ReIDRecovery::OverrideDecision> ReIDRecovery::recoverFromLowQualityA
         float center_ratio = 0.0f;
     };
 
+    persist_frames = std::max<size_t>(1, persist_frames);
+
     std::unordered_map<size_t, STrackPtr> lost_map;
     for (const auto& track : lost_tracks)
     {
@@ -246,10 +256,14 @@ std::vector<ReIDRecovery::OverrideDecision> ReIDRecovery::recoverFromLowQualityA
         lost_map[track->getTrackId()] = track;
     }
 
-    std::vector<Candidate> candidates;
+    std::unordered_map<std::string, Candidate> current_best_candidates;
     for (const auto& active_match : active_matches)
     {
-        if (active_match.iou >= active_iou_threshold)
+        const auto age_it = active_track_ages.find(active_match.track_id);
+        const size_t active_age = (age_it == active_track_ages.end())
+            ? (max_active_age_frames + 1)
+            : age_it->second;
+        if (active_match.iou >= active_iou_threshold && active_age > max_active_age_frames)
             continue;
         if (active_match.det_index >= det_features.size() || active_match.det_index >= det_boxes.size() || active_match.det_index >= detections.size())
             continue;
@@ -266,9 +280,60 @@ std::vector<ReIDRecovery::OverrideDecision> ReIDRecovery::recoverFromLowQualityA
             const float center_ratio = computeCenterRatio(track_box, det_boxes[active_match.det_index]);
             if (similarity >= similarity_threshold && (iou >= 0.01f || center_ratio <= 2.5f))
             {
-                candidates.push_back({active_match.track_id, lost_track_id, active_match.det_index,
-                                      active_match.iou, similarity, iou, center_ratio});
+                Candidate candidate{active_match.track_id, lost_track_id, active_match.det_index,
+                                    active_match.iou, similarity, iou, center_ratio};
+                const std::string key = makePendingKey(candidate.active_track_id, candidate.lost_track_id);
+                const auto it = current_best_candidates.find(key);
+                if (it == current_best_candidates.end() ||
+                    candidate.similarity > it->second.similarity ||
+                    (candidate.similarity == it->second.similarity && candidate.iou > it->second.iou))
+                {
+                    current_best_candidates[key] = candidate;
+                }
             }
+        }
+    }
+
+    std::vector<Candidate> candidates;
+    candidates.reserve(current_best_candidates.size());
+    constexpr size_t kAllowedPersistGapFrames = 1;
+    for (const auto& [key, candidate] : current_best_candidates)
+    {
+        auto& pending = pending_overrides_[key];
+        const bool seen_recently = pending.last_frame_id != 0 &&
+                                   frame_id <= pending.last_frame_id + kAllowedPersistGapFrames + 1;
+        if (seen_recently)
+        {
+            ++pending.streak;
+        }
+        else
+        {
+            pending.streak = 1;
+        }
+        pending.last_frame_id = frame_id;
+        pending.active_track_id = candidate.active_track_id;
+        pending.lost_track_id = candidate.lost_track_id;
+        pending.det_index = candidate.det_index;
+        pending.active_iou = candidate.active_iou;
+        pending.similarity = candidate.similarity;
+        pending.iou = candidate.iou;
+        pending.center_ratio = candidate.center_ratio;
+
+        if (pending.streak >= persist_frames)
+        {
+            candidates.push_back(candidate);
+        }
+    }
+
+    for (auto it = pending_overrides_.begin(); it != pending_overrides_.end();)
+    {
+        if (it->second.last_frame_id + kAllowedPersistGapFrames + 1 < frame_id)
+        {
+            it = pending_overrides_.erase(it);
+        }
+        else
+        {
+            ++it;
         }
     }
 
@@ -302,6 +367,7 @@ std::vector<ReIDRecovery::OverrideDecision> ReIDRecovery::recoverFromLowQualityA
         used_dets.insert(candidate.det_index);
         decisions.push_back({candidate.active_track_id, candidate.lost_track_id,
                              candidate.det_index, candidate.active_iou, candidate.similarity});
+        pending_overrides_.erase(makePendingKey(candidate.active_track_id, candidate.lost_track_id));
     }
 
     return decisions;

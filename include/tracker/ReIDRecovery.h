@@ -9,6 +9,7 @@
 #include <functional>
 #include <map>
 #include <set>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -78,7 +79,7 @@ public:
                        const std::vector<float>& feature,
                        size_t max_history);
 
-    void resetStats() { stats_ = {}; frame_stats_.clear(); }
+    void resetStats() { stats_ = {}; frame_stats_.clear(); pending_overrides_.clear(); }
     const Stats& getStats() const { return stats_; }
     const std::map<size_t, FrameStats>& getFrameStats() const { return frame_stats_; }
     void recordDetectionFeatureStats(size_t crop_invalid,
@@ -102,9 +103,12 @@ public:
         const std::vector<std::array<float, 4>>& det_boxes,
         const std::vector<std::vector<float>>& det_features,
         const std::vector<ActiveMatch>& active_matches,
+        const std::unordered_map<size_t, size_t>& active_track_ages,
         size_t frame_id,
         size_t recovery_window,
         float similarity_threshold,
+        size_t persist_frames,
+        size_t max_active_age_frames,
         float active_iou_threshold,
         const RecoverFn& recover_fn) const;
 
@@ -118,14 +122,29 @@ private:
         float center_ratio = 0.0f;
     };
 
+    struct PendingOverride
+    {
+        size_t last_frame_id = 0;
+        size_t streak = 0;
+        size_t active_track_id = 0;
+        size_t lost_track_id = 0;
+        size_t det_index = 0;
+        float active_iou = 0.0f;
+        float similarity = 0.0f;
+        float iou = 0.0f;
+        float center_ratio = 0.0f;
+    };
+
     std::unordered_map<size_t, std::deque<std::vector<float>>> gallery_;
     Stats stats_;
     std::map<size_t, FrameStats> frame_stats_;
+    mutable std::unordered_map<std::string, PendingOverride> pending_overrides_;
 
     static std::vector<float> normalizeFeature(const std::vector<float>& feature);
     static float cosineSimilarity(const std::vector<float>& a, const std::vector<float>& b);
     static float computeIou(const std::array<float, 4>& a, const std::array<float, 4>& b);
     static float computeCenterRatio(const std::array<float, 4>& a, const std::array<float, 4>& b);
+    static std::string makePendingKey(size_t active_track_id, size_t lost_track_id);
     std::vector<float> averageGalleryFeature(size_t track_id) const;
 };
 

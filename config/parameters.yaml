@@ -14,7 +14,7 @@ debug_show: 0
 rknn_model_inference: 2
 
 # Detection
-detect_rknn_model: "models/rknn/int8_pd_yolov26n_mmse_channel.rknn"
+detect_rknn_model: "models/rknn/0406_pd_yolo26n_mmse_channel_int8.rknn"
 detect_class_num: 1
 detect_image_width: 416
 detect_image_height: 416
@@ -29,12 +29,13 @@ bytetrack_new_track_thresh: 0.5
 bytetrack_match_thresh: 0.8
 
 # Tracking: BoTSORT
-botsort_track_buffer: 30
+botsort_track_buffer: 60
 botsort_track_thresh: 0.1
 botsort_high_thresh: 0.3
 botsort_new_track_thresh: 0.5
 botsort_match_thresh: 0.8
 botsort_gmc_method: 0   # 0=ORB, 1=SparseOptFlow, 2=None
+botsort_recovery_window: 60
 
 # Tracking: OA-ByteTrack
 oabytetrack_track_buffer: 30
@@ -58,6 +59,8 @@ oabotsort_use_bam: 1
 # Person ReID
 person_reid_rknn_model: "models/rknn/osnet_x0_25_0320_aug_reid.rknn"
 person_similarity_threshold: 0.80
+reid_recovery_persist_frames: 3
+reid_recovery_max_active_age_frames: 12
 
 # Gallery
 gallery_max_size: 30
