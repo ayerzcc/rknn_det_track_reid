@@ -29,13 +29,13 @@ bytetrack_new_track_thresh: 0.5
 bytetrack_match_thresh: 0.8
 
 # Tracking: BoTSORT
-botsort_track_buffer: 60
+botsort_track_buffer: 90
 botsort_track_thresh: 0.1
 botsort_high_thresh: 0.3
 botsort_new_track_thresh: 0.5
 botsort_match_thresh: 0.8
 botsort_gmc_method: 0   # 0=ORB, 1=SparseOptFlow, 2=None
-botsort_recovery_window: 60
+botsort_recovery_window: 90
 
 # Tracking: OA-ByteTrack
 oabytetrack_track_buffer: 30
