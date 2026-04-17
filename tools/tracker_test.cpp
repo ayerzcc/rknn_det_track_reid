@@ -50,7 +50,7 @@ struct Options
     TrackerType tracker_type = TrackerType::ByteTrack;
     int frame_rate = 30;
     int max_frames = -1;
-    int track_buffer = 30;
+    int track_buffer = -1;
     int recovery_window = -1;
     float track_thresh = 0.0f;  // loaded from config
     float high_thresh = 0.0f;   // loaded from config
@@ -826,7 +826,7 @@ int run_botsort_video(TrackerT& tracker,
                       PersonFeatureExtractor& extractor)
 {
     std::shared_ptr<Config> params_config = Config::getDefaultInstance();
-    const float reid_match_threshold = std::min(params_config->getKeyValue<float>("person_similarity_threshold"), 0.30f);
+    const float reid_match_threshold = params_config->getKeyValue<float>("person_similarity_threshold");
     const size_t gallery_history = 10;
     const size_t visual_lost_window = 3;
     const size_t recovery_window = (options.recovery_window > 0)

@@ -1,69 +1,110 @@
 %YAML:1.0
 ---
 
-# 0 for showing algorithm running error; 1 for showing algorithm running results; 2 for showing algorithm result image in local machine
+# 调试显示级别:
+# 0 = 仅打印错误
+# 1 = 输出算法运行结果
+# 2 = 在本地机器上显示结果图像
 debug_show: 0
 
-#     RKNN_NPU_CORE_AUTO = 0
-#     RKNN_NPU_CORE_0 = 1
-#     RKNN_NPU_CORE_1 = 2
-#     RKNN_NPU_CORE_2 = 4
-#     RKNN_NPU_CORE_0_1 = RKNN_NPU_CORE_0 | RKNN_NPU_CORE_1
-#     RKNN_NPU_CORE_0_1_2 = RKNN_NPU_CORE_0_1 | RKNN_NPU_CORE_2
-#     RKNN_NPU_CORE_ALL = 0xffff
+# RKNN 推理使用的 NPU 核心掩码:
+# RKNN_NPU_CORE_AUTO = 0
+# RKNN_NPU_CORE_0 = 1
+# RKNN_NPU_CORE_1 = 2
+# RKNN_NPU_CORE_2 = 4
+# RKNN_NPU_CORE_0_1 = RKNN_NPU_CORE_0 | RKNN_NPU_CORE_1
+# RKNN_NPU_CORE_0_1_2 = RKNN_NPU_CORE_0_1 | RKNN_NPU_CORE_2
+# RKNN_NPU_CORE_ALL = 0xffff
 rknn_model_inference: 2
 
-# Detection
+# 检测模型配置
+# 人体检测 RKNN 模型路径
 detect_rknn_model: "models/rknn/0406_pd_yolo26n_mmse_channel_int8.rknn"
+# 检测类别数，当前人体检测一般为 1 类
 detect_class_num: 1
+# 检测输入宽度
 detect_image_width: 416
+# 检测输入高度
 detect_image_height: 416
+# 检测置信度阈值，低于该值的框会被过滤
 detect_score_threshold: 0.25
+# NMS 的 IoU 阈值，越大越容易保留重叠框
 nms_iou_threshold: 0.45
 
-# Tracking: ByteTrack
+# ByteTrack 跟踪参数
+# 丢失轨迹缓冲帧数，越大越能容忍短时漏检
 bytetrack_track_buffer: 30
+# 参与跟踪的最低检测置信度
 bytetrack_track_thresh: 0.1
+# 高置信度阈值，用于主关联阶段
 bytetrack_high_thresh: 0.3
+# 新建轨迹所需的最低置信度
 bytetrack_new_track_thresh: 0.5
+# 匹配阈值，控制轨迹与检测框的关联严格程度
 bytetrack_match_thresh: 0.8
 
-# Tracking: BoTSORT
+# BoTSORT 跟踪参数
+# 丢失轨迹缓冲帧数，越大越能容忍更长时间的漏检
 botsort_track_buffer: 90
+# 参与跟踪的最低检测置信度
 botsort_track_thresh: 0.1
+# 高置信度阈值，用于主关联阶段
 botsort_high_thresh: 0.3
+# 新建轨迹所需的最低置信度
 botsort_new_track_thresh: 0.5
+# 匹配阈值，控制轨迹与检测框的关联严格程度
 botsort_match_thresh: 0.8
-botsort_gmc_method: 0   # 0=ORB, 1=SparseOptFlow, 2=None
+# 全局运动补偿方法:
+# 0 = ORB
+# 1 = SparseOptFlow
+# 2 = None
+botsort_gmc_method: 0
+# ReID 恢复窗口，超过该帧数的 lost 轨迹不会再尝试接回
 botsort_recovery_window: 90
 
-# Tracking: OA-ByteTrack
+# OA-ByteTrack 跟踪参数
+# 丢失轨迹缓冲帧数
 oabytetrack_track_buffer: 30
+# 参与跟踪的最低检测置信度
 oabytetrack_track_thresh: 0.1
+# 高置信度阈值
 oabytetrack_high_thresh: 0.3
+# 新建轨迹所需的最低置信度
 oabytetrack_new_track_thresh: 0.5
+# 匹配阈值
 oabytetrack_match_thresh: 0.8
+# 是否启用 OAO（Occlusion-Aware Offset）
 oabytetrack_use_oao: 1
+# 是否启用 BAM（Bias-Aware Momentum）
 oabytetrack_use_bam: 1
 
-# Tracking: OA-BoTSORT
+# OA-BoTSORT 跟踪参数
+# 丢失轨迹缓冲帧数
 oabotsort_track_buffer: 30
+# 参与跟踪的最低检测置信度
 oabotsort_track_thresh: 0.1
+# 高置信度阈值
 oabotsort_high_thresh: 0.3
+# 新建轨迹所需的最低置信度
 oabotsort_new_track_thresh: 0.5
+# 匹配阈值
 oabotsort_match_thresh: 0.8
-oabotsort_gmc_method: 0 # 0=ORB, 1=SparseOptFlow, 2=None
+# 全局运动补偿方法:
+# 0 = ORB
+# 1 = SparseOptFlow
+# 2 = None
+oabotsort_gmc_method: 0
+# 是否启用 OAO
 oabotsort_use_oao: 1
+# 是否启用 BAM
 oabotsort_use_bam: 1
 
-# Person ReID
+# Person ReID 模型与恢复参数
+# 行人 ReID RKNN 模型路径
 person_reid_rknn_model: "models/rknn/osnet_x0_25_0320_aug_reid.rknn"
-person_similarity_threshold: 0.80
+# 行人外观相似度阈值，越高越严格
+person_similarity_threshold: 0.30
+# ReID 恢复中，候选轨迹需要连续命中的帧数
 reid_recovery_persist_frames: 3
+# active 轨迹允许参与 ReID 覆盖的最大年龄帧数
 reid_recovery_max_active_age_frames: 12
-
-# Gallery
-gallery_max_size: 30
-gallery_feature_length: 512
-gallerry_database_dir: "./output/gallery_database"
-gallery_similarity_save_threshold: 0.82

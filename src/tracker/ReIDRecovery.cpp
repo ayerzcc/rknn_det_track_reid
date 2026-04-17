@@ -50,6 +50,8 @@ size_t ReIDRecovery::recoverLostTracks(const std::vector<STrackPtr>& lost_tracks
                                        size_t gallery_history,
                                        const RecoverFn& recover_fn)
 {
+    constexpr size_t kLongGapGeometryRelaxFrames = 5;
+
     std::set<size_t> used_dets;
     for (const auto& match : active_matches)
     {
@@ -93,6 +95,7 @@ size_t ReIDRecovery::recoverLostTracks(const std::vector<STrackPtr>& lost_tracks
         lost_map[track->getTrackId()] = track;
         const auto& rect = track->getRect();
         const std::array<float, 4> track_box = {rect.tl_x(), rect.tl_y(), rect.br_x(), rect.br_y()};
+        const bool relax_geometry_for_long_gap = gap > kLongGapGeometryRelaxFrames;
         bool has_det_feature = false;
         bool has_similarity_match = false;
         bool has_geometry_match = false;
@@ -140,7 +143,7 @@ size_t ReIDRecovery::recoverLostTracks(const std::vector<STrackPtr>& lost_tracks
             if (similarity >= similarity_threshold)
             {
                 has_similarity_match = true;
-                if (iou >= 0.01f || center_ratio <= 2.5f)
+                if (relax_geometry_for_long_gap || iou >= 0.01f || center_ratio <= 2.5f)
                 {
                     has_geometry_match = true;
                     candidates.push_back({track->getTrackId(), det_index, similarity, iou, center_ratio});
